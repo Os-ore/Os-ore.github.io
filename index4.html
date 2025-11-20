@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromeOS Simulator</title>
+    <!-- 1. Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Ensure iframes are blocked from pointer events when dragging */
+        .dragging {
+            user-select: none;
+        }
+        .dragging iframe {
+            pointer-events: none;
+        }
+
+        /* Transition for launcher */
+        #app-launcher {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            visibility: hidden;
+            opacity: 0;
+        }
+        #app-launcher.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Transition for windows */
+        .app-window {
+            transition: opacity 0.2s ease, transform 0.2s ease, width 0.3s ease, height 0.3s ease, top 0.3s ease, left 0.3s ease;
+            transform-origin: bottom left;
+        }
+        .app-window.minimized {
+            opacity: 0;
+            transform: scale(0);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans overflow-hidden">
+
+    <!-- 2. Desktop Environment -->
+    <main id="desktop" class="w-screen h-screen bg-cover bg-center" style="background-image: url('https://placehold.co/1920x1080/0f172a/94a3b8?text=Simulated+Desktop');">
+        <!-- App Windows will be appended here -->
+    </main>
+
+    <!-- 3. Shelf (Taskbar) -->
+    <footer id="shelf" class="fixed bottom-0 left-0 w-full h-14 bg-black/70 backdrop-blur-md flex items-center px-4 z-[9990]">
+        <!-- Launcher Button -->
+        <button id="launcher-btn" class="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all" title="App Launcher">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+        </button>
+
+        <!-- Pinned Apps -->
+        <div id="pinned-apps" class="flex items-center gap-3 ml-3">
+            <!-- Apps will be rendered here by JS -->
+        </div>
+
+        <!-- Minimized App Icons -->
+        <div id="minimized-apps" class="flex items-center gap-3 ml-3 border-l border-white/20 pl-3">
+            <!-- Minimized app icons will go here -->
+        </div>
+        
+        <!-- Status Tray (Right Side) -->
+        <div id="status-tray" class="ml-auto flex items-center gap-3 text-xs">
+            <span id="user-id-display" class="text-gray-400" title="User ID">Loading...</span>
+            <div class="p-2 rounded-full bg-white/20">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341A6.002 6.002 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            </div>
+            <div id="clock" class="p-2 rounded-full bg-white/20 w-16 text-center">
+                12:00 PM
+            </div>
+        </div>
+    </footer>
+
+    <!-- 4. App Launcher -->
+    <div id="app-launcher" class="fixed inset-0 bg-black/80 backdrop-blur-lg z-[9980] flex flex-col items-center p-8 overflow-y-auto">
+        <!-- Search Bar -->
+        <input id="search-bar" type="text" placeholder="Search for apps..." class="w-full max-w-lg p-3 rounded-full bg-white/10 text-white placeholder-gray-300 outline-none focus:ring-2 focus:ring-blue-500">
+        
+        <!-- App Grid -->
+        <div id="app-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-6 mt-12 w-full max-w-5xl">
+            <!-- All apps will be rendered here by JS -->
+        </div>
+        
+        <!-- Add App Form -->
+        <div class="mt-12 p-6 rounded-lg bg-white/10 w-full max-w-lg">
+            <h3 class="text-lg font-medium text-center">Turn a URL into an App</h3>
+            <form id="add-app-form" class="flex flex-col sm:flex-row gap-3 mt-4">
+                <input id="app-name-input" type="text" placeholder="App Name" class="flex-grow p-3 rounded-lg bg-white/20 outline-none focus:ring-2 focus:ring-blue-500" required>
+                <input id="app-url-input" type="url" placeholder="App URL (e.g. https://...)" class="flex-grow p-3 rounded-lg bg-white/20 outline-none focus:ring-2 focus:ring-blue-500" required>
+                <button type="submit" class="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-all font-semibold">Add App</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 5. Custom Modals -->
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10001] hidden">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <h3 class="text-lg font-medium">Delete App</h3>
+            <p class="mt-2 text-sm text-gray-300">
+                Are you sure you want to delete <strong id="delete-app-name" class="font-bold"></strong>? This action cannot be undone.
+            </p>
+            <div class="mt-6 flex justify-end gap-3">
+                <button id="cancel-delete-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm font-medium transition-all">Cancel</button>
+                <button id="confirm-delete-btn" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium transition-all">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- iFrame Warning Modal -->
+    <div id="iframe-warning-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10001] hidden">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <h3 class="text-lg font-medium">App Not Loading?</h3>
+            <p class="mt-2 text-sm text-gray-300">
+                Some websites (like Google, Facebook, etc.) block themselves from being loaded inside an app like this for security reasons.
+                <br><br>
+                If you see a blank screen, this is likely why. The "RH Browser" app is designed to work around this, but others may not.
+            </p>
+            <div class="mt-6 flex justify-end gap-3">
+                <button id="close-warning-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-all">Got it</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 6. Firebase SDK -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            addDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection,
+            query
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Global State ---
+        let db, auth, userId, appId, isAuthReady = false;
+        let userAppsCollectionRef = null;
+        let globalMaxZIndex = 100;
+        let openWindows = {}; // Store window state by ID
+        let minimizedWindows = {}; // Store minimized app icons
+        let draggedWindow = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // Default apps as requested
+        const defaultApps = [
+            { id: 'rh', name: 'RH Browser', url: 'https://browser.rammerhead.org', icon: 'RH', pinned: true },
+            { id: 'canvas', name: 'Canvas', url: 'https://canvas.apps.chrome', icon: '🎨', pinned: true },
+            { id: 'gmail', name: 'Gmail', url: 'https://mail.google.com', icon: '✉️', pinned: true },
+            { id: 'play', name: 'Play Store', url: 'https://play.google.com/store/games?device=chromebook', icon: '🛒', pinned: true }
+        ];
+        
+        let userApps = []; // Will be populated by Firestore
+
+        // --- DOM Elements ---
+        const desktop = document.getElementById('desktop');
+        const shelf = document.getElementById('shelf');
+        const pinnedAppsContainer = document.getElementById('pinned-apps');
+        const minimizedAppsContainer = document.getElementById('minimized-apps');
+        const launcherBtn = document.getElementById('launcher-btn');
+        const appLauncher = document.getElementById('app-launcher');
+        const searchBar = document.getElementById('search-bar');
+        const appGrid = document.getElementById('app-grid');
+        const clockElement = document.getElementById('clock');
+        const addAppForm = document.getElementById('add-app-form');
+        const appNameInput = document.getElementById('app-name-input');
+        const appUrlInput = document.getElementById('app-url-input');
+        const userIdDisplay = document.getElementById('user-id-display');
+        
+        // Modals
+        const deleteModal = document.getElementById('delete-modal');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const deleteAppName = document.getElementById('delete-app-name');
+        
+        const warningModal = document.getElementById('iframe-warning-modal');
+        const closeWarningBtn = document.getElementById('close-warning-btn');
+
+
+        // --- Initialization ---
+
+        window.onload = () => {
+            initFirebase();
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            launcherBtn.addEventListener('click', toggleLauncher);
+            document.addEventListener('click', (e) => {
+                // Close launcher if clicking outside of it
+                if (appLauncher.classList.contains('visible') && !appLauncher.contains(e.target) && e.target !== launcherBtn) {
+                    toggleLauncher(false);
+                }
+            });
+            appLauncher.addEventListener('click', (e) => e.stopPropagation()); // Prevent clicks inside launcher from closing it
+            
+            searchBar.addEventListener('input', renderAllApps);
+            addAppForm.addEventListener('submit', handleAddApp);
+            
+            // Global mouse listeners for dragging
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', stopDrag);
+
+            // Modal listeners
+            cancelDeleteBtn.addEventListener('click', () => showDeleteModal(false));
+            closeWarningBtn.addEventListener('click', () => showWarningModal(false));
+        };
+
+        async function initFirebase() {
+            try {
+                // 1. Get Config
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-chromesim-app';
+                const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                const firebaseConfig = JSON.parse(firebaseConfigStr);
+
+                if (!firebaseConfig.apiKey) {
+                    console.error("Firebase config is missing.");
+                    userIdDisplay.innerText = "Offline Mode";
+                    isAuthReady = true; // Allow app to run in offline mode
+                    renderAllApps();
+                    return;
+                }
+
+                // 2. Initialize Firebase
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('Debug'); // Enable verbose logging
+
+                // 3. Auth Listener
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User authenticated:", userId);
+                        userIdDisplay.innerText = `User: ${userId.substring(0, 6)}...`;
+                        
+                        // 4. Set up Firestore ref and listener
+                        userAppsCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'userApps');
+                        isAuthReady = true;
+                        loadUserApps(); // This will also call renderAllApps
+                    } else {
+                        // 5. Sign in
+                        console.log("No user, signing in...");
+                        const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        if (token) {
+                            await signInWithCustomToken(auth, token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase Init Error:", error);
+                userIdDisplay.innerText = "Error";
+                isAuthReady = true; // Allow offline mode
+                renderAllApps();
+            }
+        }
+
+        // --- Data Handling (Firestore) ---
+
+        function loadUserApps() {
+            if (!isAuthReady || !userAppsCollectionRef) {
+                console.log("Auth not ready, skipping app load.");
+                renderAllApps(); // Render default apps
+                return;
+            }
+
+            console.log("Setting up Firestore listener...");
+            onSnapshot(query(userAppsCollectionRef), (snapshot) => {
+                userApps = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isUserApp: true }));
+                console.log("Firestore User Apps Updated:", userApps);
+                renderAllApps();
+            }, (error) => {
+                console.error("Firestore Snapshot Error:", error);
+            });
+        }
+
+        async function handleAddApp(e) {
+            e.preventDefault();
+            const name = appNameInput.value.trim();
+            const url = appUrlInput.value.trim();
+
+            if (!name || !url) return;
+
+            const newApp = { name, url, icon: '🌐' };
+
+            if (!isAuthReady || !userAppsCollectionRef) {
+                // Offline mode
+                userApps.push({ ...newApp, id: `local-${Date.now()}`, isUserApp: true });
+                renderAllApps();
+                alert("Offline Mode: App added locally and will not be saved.");
+            } else {
+                // Firestore mode
+                try {
+                    await addDoc(userAppsCollectionRef, newApp);
+                    console.log("App added to Firestore:", newApp);
+                } catch (error) {
+                    console.error("Error adding app to Firestore:", error);
+                }
+            }
+
+            appNameInput.value = '';
+            appUrlInput.value = '';
+            toggleLauncher(false); // Close launcher after adding
+        }
+
+        async function handleDeleteApp(appId) {
+            if (!isAuthReady || !userAppsCollectionRef) {
+                // Offline mode
+                userApps = userApps.filter(app => app.id !== appId);
+                renderAllApps();
+                alert("Offline Mode: App removed locally.");
+            } else {
+                // Firestore mode
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'userApps', appId));
+                    console.log("App deleted from Firestore:", appId);
+                } catch (error) {
+                    console.error("Error deleting app:", error);
+                }
+            }
+        }
+
+        // --- UI Rendering ---
+
+        function updateClock() {
+            const now = new Date();
+            clockElement.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderAllApps() {
+            if (!isAuthReady) return; // Wait for auth
+            
+            pinnedAppsContainer.innerHTML = '';
+            appGrid.innerHTML = '';
+            
+            const allApps = [...defaultApps, ...userApps];
+            const searchTerm = searchBar.value.toLowerCase();
+            
+            allApps.filter(app => app.name.toLowerCase().includes(searchTerm))
+                 .forEach(app => {
+                
+                // 1. Render to App Grid (Launcher)
+                const appIcon = createAppIcon(app, 'launcher');
+                appGrid.appendChild(appIcon);
+                
+                // 2. Render Pinned Apps to Shelf
+                if (app.pinned) {
+                    const pinnedIcon = createAppIcon(app, 'shelf');
+                    pinnedAppsContainer.appendChild(pinnedIcon);
+                }
+            });
+        }
+        
+        function createAppIcon(app, context) {
+            if (context === 'shelf') {
+                const el = document.createElement('button');
+                el.className = 'w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all text-xl';
+                el.title = app.name;
+                el.innerHTML = app.icon;
+                el.onclick = () => openApp(app);
+                return el;
+            }
+            
+            if (context === 'launcher') {
+                const el = document.createElement('div');
+                el.className = 'relative flex flex-col items-center text-white text-sm hover:bg-white/10 p-3 rounded-lg transition-all cursor-pointer';
+                el.onclick = () => {
+                    openApp(app);
+                    toggleLauncher(false); // Close launcher on app open
+                };
+                
+                const icon = document.createElement('div');
+                icon.className = 'w-14 h-14 rounded-full bg-white/10 flex items-center justify-center text-3xl mb-2';
+                icon.innerHTML = app.icon;
+                
+                const name = document.createElement('span');
+                name.className = 'text-center truncate w-20';
+                name.textContent = app.name;
+                
+                el.append(icon, name);
+                
+                // Add delete button for user-created apps
+                if (app.isUserApp) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.className = 'absolute top-0 right-0 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full text-white text-lg font-bold flex items-center justify-center';
+                    deleteBtn.title = `Delete ${app.name}`;
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation(); // Don't trigger app open
+                        showDeleteModal(true, app.id, app.name);
+                    };
+                    el.appendChild(deleteBtn);
+                }
+                return el;
+            }
+        }
+        
+        function toggleLauncher(forceState) {
+            const isVisible = appLauncher.classList.contains('visible');
+            const show = forceState !== undefined ? forceState : !isVisible;
+            
+            if (show) {
+                appLauncher.classList.add('visible');
+                searchBar.focus();
+            } else {
+                appLauncher.classList.remove('visible');
+                searchBar.value = '';
+                renderAllApps(); // Reset search
+            }
+        }
+
+        // --- Window Management ---
+
+        function openApp(app) {
+            // Check if window is just minimized
+            const minimized = Object.values(minimizedWindows).find(min => min.app.id === app.id);
+            if (minimized) {
+                restoreWindow(minimized.windowId);
+                return;
+            }
+            
+            // Check if window is already open (and not minimized)
+            const existingWindow = Object.values(openWindows).find(win => win.app.id === app.id && win.state !== 'minimized');
+            if (existingWindow) {
+                bringWindowToFront(existingWindow.element);
+                return;
+            }
+
+            // Show iFrame warning for non-RH apps
+            if (app.id !== 'rh') {
+                showWarningModal(true);
+            }
+
+            const windowId = `window-${Date.now()}`;
+            globalMaxZIndex++;
+            
+            const winEl = document.createElement('div');
+            winEl.id = windowId;
+            winEl.className = 'app-window absolute bg-gray-800 rounded-lg shadow-2xl flex flex-col';
+            winEl.style.width = '70vw';
+            winEl.style.height = '70vh';
+            winEl.style.top = '10vh';
+            winEl.style.left = '15vw';
+            winEl.style.zIndex = globalMaxZIndex;
+            
+            // Title Bar
+            const titleBar = document.createElement('div');
+            titleBar.className = 'h-8 bg-gray-700 flex items-center justify-between px-2 cursor-move rounded-t-lg';
+            titleBar.onmousedown = (e) => startDrag(e, winEl);
+            
+            const title = document.createElement('span');
+            title.className = 'text-sm font-medium truncate';
+            title.textContent = `${app.icon} ${app.name}`;
+            
+            const controls = document.createElement('div');
+            controls.className = 'flex gap-2';
+            
+            const minBtn = document.createElement('button');
+            minBtn.className = 'w-4 h-4 bg-yellow-400 rounded-full hover:bg-yellow-500';
+            minBtn.title = 'Minimize';
+            minBtn.onclick = (e) => {
+                e.stopPropagation();
+                minimizeWindow(windowId);
+            };
+            
+            const maxBtn = document.createElement('button');
+            maxBtn.className = 'w-4 h-4 bg-green-400 rounded-full hover:bg-green-500';
+            maxBtn.title = 'Maximize';
+            maxBtn.onclick = (e) => {
+                e.stopPropagation();
+                maximizeWindow(windowId);
+            };
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'w-4 h-4 bg-red-500 rounded-full hover:bg-red-600';
+            closeBtn.title = 'Close';
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
+                closeWindow(windowId);
+            };
+            
+            controls.append(minBtn, maxBtn, closeBtn);
+            titleBar.append(title, controls);
+            
+            // Content
+            const content = document.createElement('div');
+            content.className = 'flex-grow bg-black relative';
+            
+            const iframe = document.createElement('iframe');
+            iframe.src = app.url;
+            iframe.className = 'w-full h-full border-0';
+            iframe.setAttribute('sandbox', 'allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts');
+            
+            content.appendChild(iframe);
+            winEl.append(titleBar, content);
+            desktop.appendChild(winEl);
+            
+            // Bring to front on click
+            winEl.onmousedown = () => bringWindowToFront(winEl);
+            
+            openWindows[windowId] = {
+                id: windowId,
+                app: app,
+                element: winEl,
+                state: 'normal', // normal, maximized, minimized
+                position: { top: winEl.style.top, left: winEl.style.left },
+                size: { width: winEl.style.width, height: winEl.style.height }
+            };
+        }
+
+        function closeWindow(windowId) {
+            const win = openWindows[windowId];
+            if (win) {
+                win.element.remove();
+                delete openWindows[windowId];
+            }
+            // Also check if it was minimized
+            const minWin = minimizedWindows[windowId];
+            if (minWin) {
+                minWin.iconElement.remove();
+                delete minimizedWindows[windowId];
+            }
+        }
+        
+        function minimizeWindow(windowId) {
+            const win = openWindows[windowId];
+            if (!win) return;
+            
+            // 1. Hide window
+            win.element.classList.add('minimized');
+            win.state = 'minimized';
+            
+            // 2. Create shelf icon
+            const minIcon = document.createElement('button');
+            minIcon.className = 'w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all text-xl border-2 border-blue-400';
+            minIcon.title = `Restore ${win.app.name}`;
+            minIcon.innerHTML = win.app.icon;
+            minIcon.id = `min-${windowId}`;
+            minIcon.onclick = () => restoreWindow(windowId);
+            
+            minimizedAppsContainer.appendChild(minIcon);
+            minimizedWindows[windowId] = {
+                windowId: windowId,
+                app: win.app,
+                iconElement: minIcon
+            };
+            
+            // DO NOT delete from openWindows, just hide it
+            // delete openWindows[windowId];
+        }
+
+        function restoreWindow(windowId) {
+            const minWin = minimizedWindows[windowId];
+            if (!minWin) return;
+            
+            const win = openWindows[windowId]; // Get the window data from openWindows
+            if (!win) {
+                // This case should ideally not be hit, but as a fallback:
+                console.warn("Window data not found in openWindows, re-opening app.");
+                openApp(minWin.app); // This could cause issues if state isn't cleaned up
+                minWin.iconElement.remove();
+                delete minimizedWindows[windowId];
+                return;
+            }
+            
+            // 1. Show the window
+            win.element.classList.remove('minimized');
+            win.state = 'normal'; // Or restore to previous state if we stored it
+            bringWindowToFront(win.element);
+            
+            // 2. Remove shelf icon
+            minWin.iconElement.remove();
+            delete minimizedWindows[windowId];
+        }
+        
+        function maximizeWindow(windowId) {
+            const win = openWindows[windowId];
+            if (!win) return;
+            
+            if (win.state === 'normal') {
+                // Store old pos/size
+                win.position = { top: win.element.style.top, left: win.element.style.left };
+                win.size = { width: win.element.style.width, height: win.element.style.height };
+                
+                // Maximize
+                win.element.style.top = '0';
+                win.element.style.left = '0';
+                win.element.style.width = '100vw';
+                win.element.style.height = 'calc(100vh - 3.5rem)'; // Fullscreen minus shelf
+                win.element.classList.add('rounded-none');
+                win.element.querySelector('.rounded-t-lg').classList.add('rounded-none');
+                
+                win.state = 'maximized';
+                win.element.querySelector('button[title="Maximize"]').title = 'Restore';
+            } else {
+                // Restore
+                win.element.style.top = win.position.top;
+                win.element.style.left = win.position.left;
+                win.element.style.width = win.size.width;
+                win.element.style.height = win.size.height;
+                win.element.classList.remove('rounded-none');
+                win.element.querySelector('.rounded-t-lg').classList.remove('rounded-none');
+                
+                win.state = 'normal';
+                win.element.querySelector('button[title="Restore"]').title = 'Maximize';
+            }
+        }
+        
+        function bringWindowToFront(winEl) {
+            globalMaxZIndex++;
+            winEl.style.zIndex = globalMaxZIndex;
+        }
+
+        // --- Window Drag Logic ---
+
+        function startDrag(e, winEl) {
+            // Don't drag if maximized
+            if (openWindows[winEl.id]?.state === 'maximized') return;
+            
+            draggedWindow = winEl;
+            desktop.classList.add('dragging');
+            bringWindowToFront(winEl);
+            
+            dragOffsetX = e.clientX - winEl.getBoundingClientRect().left;
+            dragOffsetY = e.clientY - winEl.getBoundingClientRect().top;
+        }
+
+        function handleDrag(e) {
+            if (!draggedWindow) return;
+            
+            let newX = e.clientX - dragOffsetX;
+            let newY = e.clientY - dragOffsetY;
+            
+            // Constrain to viewport
+            const shelfHeight = shelf.offsetHeight;
+            newX = Math.max(0, Math.min(newX, window.innerWidth - draggedWindow.offsetWidth));
+            newY = Math.max(0, Math.min(newY, window.innerHeight - shelfHeight - draggedWindow.offsetHeight));
+            
+            draggedWindow.style.left = `${newX}px`;
+            draggedWindow.style.top = `${newY}px`;
+        }
+
+        function stopDrag() {
+            draggedWindow = null;
+            desktop.classList.remove('dragging');
+        }
+
+        // --- Modal Logic ---
+
+        function showDeleteModal(show, appId = null, appName = null) {
+            if (show) {
+                deleteAppName.textContent = appName;
+                confirmDeleteBtn.onclick = () => {
+                    handleDeleteApp(appId);
+                    showDeleteModal(false);
+                };
+                deleteModal.classList.remove('hidden');
+            } else {
+                deleteModal.classList.add('hidden');
+            }
+        }
+
+        function showWarningModal(show) {
+            if (show) {
+                warningModal.classList.remove('hidden');
+            } else {
+                warningModal.classList.add('hidden');
+            }
+        }
+
+    </script>
+</body>
+</html>
