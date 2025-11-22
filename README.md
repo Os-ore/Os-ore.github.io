@@ -6,3 +6,4 @@ Load your simulator at: https://os-ore.github.io/index4.html
 NEW UPDATES!
 
 - file explorer added, add "https://os-ore.github.io/fe.html" has an app in the simulator for better lookin' like os
+- you can now pin apps from the app launcher in the simulator for fast opening apps
