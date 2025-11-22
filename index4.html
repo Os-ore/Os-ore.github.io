@@ -53,6 +53,14 @@
             transform: scale(0);
             pointer-events: none;
         }
+
+        /* Pin/Unpin button visibility on launcher tile hover */
+        .app-tile:hover .pin-btn {
+            opacity: 1;
+        }
+        .pin-btn:not(.is-pinned) {
+            opacity: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans overflow-hidden">
@@ -71,7 +79,7 @@
 
         <!-- Pinned Apps -->
         <div id="pinned-apps" class="flex items-center gap-3 ml-3">
-            <!-- Apps will be rendered here by JS -->
+            <!-- Pinned apps will be rendered here by JS -->
         </div>
 
         <!-- Minimized App Icons -->
@@ -160,7 +168,8 @@
             deleteDoc, 
             onSnapshot, 
             collection,
-            query
+            query,
+            setDoc // Required for updating pin state
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Global State ---
@@ -173,12 +182,12 @@
         let dragOffsetX = 0;
         let dragOffsetY = 0;
 
-        // Default apps as requested
+        // Default apps as requested. Added explicit pinned: true/false for clarity.
         const defaultApps = [
-            { id: 'rh', name: 'RH Browser', url: 'https://browser.rammerhead.org', icon: 'RH', pinned: true },
-            { id: 'canvas', name: 'Canvas', url: 'https://canvas.apps.chrome', icon: '🎨', pinned: true },
-            { id: 'gmail', name: 'Gmail', url: 'https://mail.google.com', icon: '✉️', pinned: true },
-            { id: 'play', name: 'Play Store', url: 'https://play.google.com/store/games?device=chromebook', icon: '🛒', pinned: true }
+            { id: 'rh', name: 'RH Browser', url: 'https://browser.rammerhead.org', icon: 'RH', pinned: true, isDefault: true },
+            { id: 'canvas', name: 'Canvas', url: 'https://canvas.apps.chrome', icon: '🎨', pinned: true, isDefault: true },
+            { id: 'gmail', name: 'Gmail', url: 'https://mail.google.com', icon: '✉️', pinned: true, isDefault: true },
+            { id: 'play', name: 'Play Store', url: 'https://play.google.com/store/games?device=chromebook', icon: '🛒', pinned: true, isDefault: true }
         ];
         
         let userApps = []; // Will be populated by Firestore
@@ -288,7 +297,46 @@
             }
         }
 
-        // --- Data Handling (Firestore) ---
+        // --- Data Handling (Firestore & Local) ---
+
+        /** Helper function to find the latest pinned state, whether default or user app. */
+        function getAppPinnedState(app) {
+            if (app.isUserApp) {
+                // Find in the local userApps array for the latest state
+                return userApps.find(ua => ua.id === app.id)?.pinned || false;
+            }
+            // Find in the fixed defaultApps array
+            return defaultApps.find(da => da.id === app.id)?.pinned || false;
+        }
+
+        /** Toggles the 'pinned' state of an app. */
+        async function togglePinApp(app) {
+            const isPinned = getAppPinnedState(app);
+            const newPinnedState = !isPinned;
+
+            if (app.isUserApp && userAppsCollectionRef) {
+                // 1. User-added app (Firestore update)
+                try {
+                    const docRef = doc(userAppsCollectionRef, app.id);
+                    // Use setDoc with merge to only update the 'pinned' field
+                    await setDoc(docRef, { pinned: newPinnedState }, { merge: true });
+                    console.log(`User app ${app.name} pin state updated to ${newPinnedState} in Firestore.`);
+                    // Firestore listener (loadUserApps) will trigger renderAllApps
+                } catch (error) {
+                    console.error("Error updating pin state in Firestore:", error);
+                }
+            } else {
+                // 2. Default app (local array update)
+                const targetArray = app.isDefault ? defaultApps : userApps;
+                const targetApp = targetArray.find(a => a.id === app.id);
+
+                if (targetApp) {
+                    targetApp.pinned = newPinnedState;
+                    console.log(`App ${app.name} pin state updated locally to ${newPinnedState}.`);
+                    renderAllApps();
+                }
+            }
+        }
 
         function loadUserApps() {
             if (!isAuthReady || !userAppsCollectionRef) {
@@ -299,7 +347,8 @@
 
             console.log("Setting up Firestore listener...");
             onSnapshot(query(userAppsCollectionRef), (snapshot) => {
-                userApps = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isUserApp: true }));
+                // Ensure every user app has isUserApp: true for correct handling
+                userApps = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isUserApp: true, pinned: doc.data().pinned ?? false }));
                 console.log("Firestore User Apps Updated:", userApps);
                 renderAllApps();
             }, (error) => {
@@ -314,13 +363,15 @@
 
             if (!name || !url) return;
 
-            const newApp = { name, url, icon: '🌐' };
+            // New apps are unpinned by default
+            const newApp = { name, url, icon: '🌐', pinned: false }; 
 
             if (!isAuthReady || !userAppsCollectionRef) {
                 // Offline mode
-                userApps.push({ ...newApp, id: `local-${Date.now()}`, isUserApp: true });
+                userApps.push({ ...newApp, id: `local-${Date.now()}`, isUserApp: true, pinned: false });
                 renderAllApps();
-                alert("Offline Mode: App added locally and will not be saved.");
+                // Custom modal instead of alert()
+                showWarningModal(true); 
             } else {
                 // Firestore mode
                 try {
@@ -341,7 +392,8 @@
                 // Offline mode
                 userApps = userApps.filter(app => app.id !== appId);
                 renderAllApps();
-                alert("Offline Mode: App removed locally.");
+                // Custom modal instead of alert()
+                showWarningModal(true); 
             } else {
                 // Firestore mode
                 try {
@@ -366,6 +418,7 @@
             pinnedAppsContainer.innerHTML = '';
             appGrid.innerHTML = '';
             
+            // Combine default and user apps
             const allApps = [...defaultApps, ...userApps];
             const searchTerm = searchBar.value.toLowerCase();
             
@@ -377,7 +430,7 @@
                 appGrid.appendChild(appIcon);
                 
                 // 2. Render Pinned Apps to Shelf
-                if (app.pinned) {
+                if (getAppPinnedState(app)) {
                     const pinnedIcon = createAppIcon(app, 'shelf');
                     pinnedAppsContainer.appendChild(pinnedIcon);
                 }
@@ -396,7 +449,9 @@
             
             if (context === 'launcher') {
                 const el = document.createElement('div');
-                el.className = 'relative flex flex-col items-center text-white text-sm hover:bg-white/10 p-3 rounded-lg transition-all cursor-pointer';
+                el.className = 'app-tile relative flex flex-col items-center text-white text-sm hover:bg-white/10 p-3 rounded-lg transition-all cursor-pointer';
+                
+                // Clicking the main tile opens the app
                 el.onclick = () => {
                     openApp(app);
                     toggleLauncher(false); // Close launcher on app open
@@ -412,11 +467,26 @@
                 
                 el.append(icon, name);
                 
+                // --- Pin/Unpin Button ---
+                const isPinned = getAppPinnedState(app);
+                const pinBtn = document.createElement('button');
+                // Using clipboard emoji for unpinned and pushpin for pinned
+                pinBtn.innerHTML = isPinned ? '📌' : '📎'; 
+                pinBtn.className = `pin-btn absolute top-1 left-1 w-6 h-6 rounded-full text-sm font-bold flex items-center justify-center transition-opacity z-10 p-0.5
+                                    ${isPinned ? 'is-pinned bg-blue-600 hover:bg-blue-700' : 'bg-gray-700/80 hover:bg-gray-600/90'}`;
+                pinBtn.title = isPinned ? `Unpin ${app.name}` : `Pin ${app.name} to shelf`;
+                pinBtn.onclick = (e) => {
+                    e.stopPropagation(); // Don't trigger app open
+                    togglePinApp(app);
+                };
+                el.appendChild(pinBtn);
+
+                
                 // Add delete button for user-created apps
                 if (app.isUserApp) {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.innerHTML = '&times;';
-                    deleteBtn.className = 'absolute top-0 right-0 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full text-white text-lg font-bold flex items-center justify-center';
+                    deleteBtn.className = 'absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full text-white text-lg font-bold flex items-center justify-center z-10';
                     deleteBtn.title = `Delete ${app.name}`;
                     deleteBtn.onclick = (e) => {
                         e.stopPropagation(); // Don't trigger app open
@@ -442,7 +512,7 @@
             }
         }
 
-        // --- Window Management ---
+        // --- Window Management (Unchanged from previous fix) ---
 
         function openApp(app) {
             // Check if window is just minimized
@@ -577,9 +647,6 @@
                 app: win.app,
                 iconElement: minIcon
             };
-            
-            // DO NOT delete from openWindows, just hide it
-            // delete openWindows[windowId];
         }
 
         function restoreWindow(windowId) {
