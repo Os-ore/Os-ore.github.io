@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer with Hierarchy</title>
+    <!-- Load Tailwind CSS for fast, responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the font and to ensure full viewport height */
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        body {
+            min-height: 100vh;
+        }
+        /* Custom style for the editor textarea */
+        #editorContent {
+            min-height: 300px;
+            resize: vertical;
+        }
+        .file-item:hover {
+            background-color: #1f2937 !important; /* Tailwind gray-700 equivalent */
+        }
+        .file-item.selected {
+             /* Ensure selected items look distinct */
+            background-color: #0d9488 !important; /* Tailwind Teal-600 */
+        }
+        /* Style for the image placeholder in the editor */
+        #imagePreview {
+            height: 300px;
+            background-size: cover;
+            background-position: center;
+            border-radius: 8px;
+            border: 2px dashed #4b5563;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 1.2rem;
+            text-align: center;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center p-4 sm:p-8">
+
+    <!-- Main File Explorer Container -->
+    <div class="w-full max-w-6xl bg-gray-800 shadow-2xl rounded-xl overflow-hidden border border-gray-700">
+        
+        <!-- Header/Toolbar -->
+        <header class="p-4 sm:p-6 bg-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-600">
+            <h1 class="text-xl sm:text-2xl font-bold text-teal-400">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                File Explorer
+            </h1>
+            <div class="flex flex-wrap gap-2">
+                <!-- Current Path Indicator -->
+                <div id="pathIndicator" class="px-3 py-1 bg-gray-600 text-gray-200 font-mono text-sm rounded-lg flex items-center">/</div>
+                
+                <!-- Upload Button (Triggers hidden input) -->
+                <input type="file" id="fileUpload" class="hidden" multiple>
+                <button id="uploadBtn" class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition duration-200 text-sm flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload File
+                </button>
+                
+                <!-- Add New Folder Button -->
+                <button id="addFolderBtn" class="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition duration-200 text-sm flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1a9 9 0 1118 0 9 9 0 01-18 0z" />
+                    </svg>
+                    Add Folder
+                </button>
+                
+                <!-- New Text File Button -->
+                <button id="addFileBtn" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition duration-200 text-sm flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1a9 9 0 1118 0 9 9 0 01-18 0z" />
+                    </svg>
+                    New Text File
+                </button>
+
+                <!-- Refresh Button -->
+                <button id="refreshBtn" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white font-medium rounded-lg transition duration-200 text-sm flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m15.356 2H18M7 13l2.25 2.25M15 13l-2.25 2.25M12 4v16M20 12h-8" />
+                    </svg>
+                    Refresh
+                </button>
+
+                <!-- Delete Selected Button -->
+                <button id="deleteBtn" disabled class="px-3 py-1 bg-red-800 hover:bg-red-700 text-gray-400 font-medium rounded-lg transition duration-200 text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete Selected
+                </button>
+            </div>
+        </header>
+
+        <!-- File List / Main Content Area -->
+        <main id="fileListContainer" class="divide-y divide-gray-700">
+            
+            <!-- List Header -->
+            <div class="grid grid-cols-12 gap-4 p-4 text-xs font-semibold uppercase text-gray-400 border-b border-gray-700">
+                <div class="col-span-6">Name</div>
+                <div class="col-span-2 text-right hidden sm:block">Size</div>
+                <div class="col-span-2 hidden sm:block">Type</div>
+                <div class="col-span-4 sm:col-span-2 text-right">Date</div>
+            </div>
+
+            <!-- File items will be rendered here by JavaScript -->
+        </main>
+        
+        <!-- Status Bar/Footer -->
+        <footer id="footerStatus" class="p-4 sm:p-6 bg-gray-700 text-sm text-gray-400 border-t border-gray-600">
+            0 items - Memory Storage (Not Saved)
+        </footer>
+    </div>
+
+    <!-- Message Box for user feedback -->
+    <div id="messageBox" class="fixed top-4 right-4 m-4 p-3 bg-teal-600 text-white rounded-lg shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none z-50">
+        Action Complete!
+    </div>
+
+    <!-- File Editor Modal -->
+    <div id="editorModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-40 hidden">
+        <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl border border-gray-700 transform transition-all duration-300 scale-95 opacity-0" id="editorPanel">
+            <!-- Modal Header -->
+            <header class="p-4 sm:p-6 bg-gray-700 border-b border-gray-600 flex justify-between items-center">
+                <h2 id="editorTitle" class="text-lg font-bold text-teal-400">Editing: [Filename]</h2>
+                <button id="closeEditorBtn" class="text-gray-400 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </header>
+            
+            <!-- Modal Body (Editor) -->
+            <div class="p-4 sm:p-6">
+                <!-- Placeholder for Image Preview (hidden by default) -->
+                <div id="imagePreview" class="hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-purple-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p id="imageFileName" class="font-semibold text-white"></p>
+                    <p class="text-sm mt-2 text-gray-400">
+                        Image content cannot be loaded or displayed due to browser security restrictions.
+                        You are editing the file's description/metadata below.
+                    </p>
+                </div>
+                <!-- Text Editor Area -->
+                <textarea id="editorContent" class="w-full p-3 bg-gray-900 text-gray-100 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"></textarea>
+            </div>
+            
+            <!-- Modal Footer -->
+            <footer class="p-4 sm:p-6 bg-gray-700 border-t border-gray-600 flex justify-end gap-3">
+                <button id="saveChangesBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition duration-200">
+                    Save Changes
+                </button>
+                <button id="cancelChangesBtn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-medium rounded-lg transition duration-200">
+                    Cancel
+                </button>
+            </footer>
+        </div>
+    </div>
+
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- 1. CONFIGURATION AND INITIAL STATE ---
+
+        // Virtual In-Memory File System - Initial state is now empty, as requested.
+        // NOTE: Folder items must have type: 'Folder', extension: '', and parentId
+        let fileSystem = []; 
+        
+        let nextFileId = 1;
+        let currentFolderId = 0; // 0 represents the root directory
+        let currentPathNames = ['/']; // To display the path in the header
+        let currentFileBeingEdited = null;
+        let selectedFileId = null;
+
+        // --- 2. DOM ELEMENT REFERENCES ---
+        const fileListContainer = document.getElementById('fileListContainer');
+        const footerStatus = document.getElementById('footerStatus');
+        const messageBox = document.getElementById('messageBox');
+        const pathIndicator = document.getElementById('pathIndicator');
+
+        const editorModal = document.getElementById('editorModal');
+        const editorPanel = document.getElementById('editorPanel');
+        const editorTitle = document.getElementById('editorTitle');
+        const editorContent = document.getElementById('editorContent');
+        const imagePreview = document.getElementById('imagePreview');
+        const imageFileName = document.getElementById('imageFileName');
+        const closeEditorBtn = document.getElementById('closeEditorBtn');
+        const saveChangesBtn = document.getElementById('saveChangesBtn');
+        const cancelChangesBtn = document.getElementById('cancelChangesBtn');
+
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileUploadInput = document.getElementById('fileUpload');
+        const addFolderBtn = document.getElementById('addFolderBtn');
+        const addFileBtn = document.getElementById('addFileBtn'); 
+        const refreshBtn = document.getElementById('refreshBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+
+
+        // --- 3. UTILITY FUNCTIONS ---
+
+        /**
+         * Converts file size in bytes to a human-readable format.
+         * @param {number} bytes The size in bytes.
+         * @returns {string} Human-readable size string.
+         */
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        /**
+         * Displays a temporary notification message.
+         * @param {string} message The message to display.
+         * @param {string} bgColor Tailwind background color class (default teal-600)
+         */
+        function showNotification(message, bgColor = 'bg-teal-600') {
+            messageBox.textContent = message;
+            messageBox.className = `fixed top-4 right-4 m-4 p-3 ${bgColor} text-white rounded-lg shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none z-50`;
+            messageBox.classList.remove('opacity-0', 'hidden');
+            messageBox.classList.add('opacity-100');
+
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100');
+                messageBox.classList.add('opacity-0');
+                setTimeout(() => messageBox.classList.add('hidden'), 300); 
+            }, 3000);
+        }
+
+        /**
+         * Gets the icon SVG based on the file extension.
+         * @param {string} extension The file extension (e.g., 'pdf', 'js', 'folder').
+         * @returns {string} SVG path/element.
+         */
+        function getFileIcon(extension) {
+            const ext = extension.toLowerCase();
+            switch (ext) {
+                case '..': // Up Navigation
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11L12 6m0 0l5 5m-5-5v12" />
+                            </svg>`;
+                case '': // Folder
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                            </svg>`;
+                case 'js':
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-yellow-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.96 15.11c-.4.4-.92.59-1.57.59-.65 0-1.16-.19-1.55-.58-.38-.38-.57-.9-.57-1.53 0-.64.19-1.16.57-1.56.39-.4.9-.59 1.55-.59.65 0 1.17.19 1.57.58.38.39.58.91.58 1.54 0 .63-.19 1.14-.58 1.53zM16.9 12c-1.39-1.55-3.03-2.32-4.9-2.32s-3.48.77-4.88 2.32c-.39.42-.58.95-.58 1.62 0 .68.2 1.25.6 1.7.4.45.92.67 1.58.67.66 0 1.18-.22 1.58-.67.4-.45.6-.9.6-1.38V12h1.8v1.89c0 .48.2.93.6 1.37.4.44.92.66 1.58.66.66 0 1.18-.22 1.58-.66.4-.44.6-.9.6-1.37 0-.67-.19-1.2-.58-1.62z"/></svg>`;
+                case 'html':
+                case 'css':
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M14 4a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a2 2 0 002 2h4a2 2 0 002-2V4zm-2 1a1 1 0 100 2h-4a1 1 0 100-2h4z" clip-rule="evenodd" />
+                            </svg>`;
+                case 'jpg':
+                case 'png':
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                            </svg>`;
+                default:
+                    return `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-2.414-2.414A1 1 0 0015.586 6H7a2 2 0 00-2 2v11a2 2 0 002 2z" />
+                            </svg>`;
+            }
+        }
+
+        /**
+         * Gets the full name path for display.
+         * @returns {string} The formatted path (e.g., /Root/MyFolder/)
+         */
+        function getFullPathString() {
+            return currentPathNames.join('/');
+        }
+        
+        // Custom replacement for window.confirm (required for iframe environment)
+        function confirm(message) {
+            // Using a simple prompt as a substitute for the window.confirm() modal
+            const result = window.prompt(message + " (Type YES to confirm)");
+            return result && result.toUpperCase() === 'YES';
+        }
+
+
+        // --- 4. CORE FILE SYSTEM LOGIC ---
+
+        /**
+         * Renders the files and folders for the current directory (currentFolderId).
+         */
+        function renderFiles() {
+            // Clear previous items (keeping the header)
+            const header = fileListContainer.querySelector('.grid.grid-cols-12');
+            fileListContainer.innerHTML = '';
+            fileListContainer.appendChild(header);
+            
+            // Filter files to show only items in the current folder
+            const visibleFiles = fileSystem.filter(f => f.parentId === currentFolderId);
+            
+            // Check if selectedFileId still exists or is visible
+            const stillExists = visibleFiles.some(f => f.id === selectedFileId);
+            if (!stillExists && selectedFileId !== 0) { // 0 is root path, not a file ID
+                selectedFileId = null;
+            }
+            
+            // Update path indicator
+            pathIndicator.textContent = getFullPathString();
+
+            // Enable/Disable delete button
+            deleteBtn.disabled = selectedFileId === null;
+            deleteBtn.classList.toggle('text-gray-400', selectedFileId === null);
+            deleteBtn.classList.toggle('text-white', selectedFileId !== null);
+
+
+            let totalSize = 0;
+            let totalItems = 0;
+
+            // 1. Add 'Go Up' entry if not at root
+            if (currentFolderId !== 0) {
+                 const upItemHtml = `
+                    <div class="file-item grid grid-cols-12 gap-4 p-4 transition duration-150 cursor-pointer hover:bg-gray-700" 
+                         data-file-id="0" data-is-up="true">
+                        <div class="col-span-12 sm:col-span-6 flex items-center font-medium text-gray-300">
+                            ${getFileIcon('..')}
+                            .. (Go Up)
+                        </div>
+                        <div class="col-span-4 sm:col-span-2 text-right text-gray-400 text-sm hidden sm:block">-</div>
+                        <div class="col-span-4 sm:col-span-2 text-gray-400 text-sm hidden sm:block">System</div>
+                        <div class="col-span-4 sm:col-span-2 text-right text-gray-400 text-sm">-</div>
+                    </div>
+                `;
+                fileListContainer.insertAdjacentHTML('beforeend', upItemHtml);
+            }
+
+
+            // 2. Render actual files in the current directory
+            visibleFiles.forEach(file => {
+                totalItems++;
+                const isFolder = file.type === 'Folder';
+                const isSelected = file.id === selectedFileId;
+                
+                // For simplicity in this in-memory simulation, calculate size based on content length or existing string value
+                const sizeValue = file.content ? file.content.length : 0;
+                if (!isFolder) {
+                    // Only count size for non-folders
+                    totalSize += sizeValue;
+                }
+                
+                const fileItemHtml = `
+                    <div class="file-item grid grid-cols-12 gap-4 p-4 transition duration-150 cursor-pointer ${isSelected ? 'selected' : 'hover:bg-gray-700'}" 
+                         data-file-id="${file.id}">
+                        <div class="col-span-12 sm:col-span-6 flex items-center font-medium ${isFolder ? 'text-teal-300' : 'text-gray-100'}">
+                            ${getFileIcon(file.extension)}
+                            ${file.name}
+                        </div>
+                        <div class="col-span-4 sm:col-span-2 text-right text-gray-300 text-sm hidden sm:block">${file.size}</div>
+                        <div class="col-span-4 sm:col-span-2 text-gray-400 text-sm hidden sm:block">${isFolder ? 'Folder' : file.extension.toUpperCase() + ' File'}</div>
+                        <div class="col-span-4 sm:col-span-2 text-right text-gray-400 text-sm">${file.date}</div>
+                    </div>
+                `;
+                fileListContainer.insertAdjacentHTML('beforeend', fileItemHtml);
+            });
+
+            // Update footer status
+            footerStatus.textContent = `${totalItems} items - Total Size: ${formatBytes(totalSize)} (Memory Storage - Not Saved)`;
+        }
+
+        /**
+         * Handles folder navigation (drill down or move up).
+         * @param {number} newFolderId The ID of the folder to navigate into.
+         * @param {string} folderName The name of the folder.
+         */
+        function navigateFolder(newFolderId, folderName) {
+            if (newFolderId === 0) {
+                // Navigate Up (Back to root or parent)
+                currentFolderId = getParentId(currentFolderId);
+                if (currentPathNames.length > 1) {
+                    currentPathNames.pop();
+                }
+                selectedFileId = null;
+                renderFiles();
+                showNotification(`Mapsd up to ${getFullPathString()}`);
+            } else {
+                // Navigate Down
+                currentFolderId = newFolderId;
+                currentPathNames.push(folderName);
+                selectedFileId = null;
+                renderFiles();
+                showNotification(`Opened folder: ${folderName}`);
+            }
+        }
+        
+        /**
+         * Gets the parentId of a folder item.
+         * @param {number} folderId The ID of the current folder.
+         * @returns {number} The parentId.
+         */
+        function getParentId(folderId) {
+            const folder = fileSystem.find(f => f.id === folderId);
+            return folder ? folder.parentId : 0;
+        }
+
+        /**
+         * Opens the editor modal with the content of the selected file.
+         * @param {number} fileId The ID of the file to edit.
+         */
+        function openFileForEdit(fileId) {
+            currentFileBeingEdited = fileSystem.find(f => f.id === fileId);
+
+            if (!currentFileBeingEdited) {
+                showNotification("Error: File not found.", 'bg-red-500');
+                return;
+            }
+            
+            const fileExt = currentFileBeingEdited.extension.toLowerCase();
+
+            // 1. Image File Check (Show Placeholder)
+            if (fileExt === 'jpg' || fileExt === 'png') {
+                editorContent.classList.add('hidden');
+                imagePreview.classList.remove('hidden');
+                saveChangesBtn.disabled = false;
+                
+                imageFileName.textContent = currentFileBeingEdited.name;
+                editorContent.value = currentFileBeingEdited.content; // Display the description/metadata
+
+            } else {
+                // 2. Normal Text/Code File (Show Textarea)
+                imagePreview.classList.add('hidden');
+                editorContent.classList.remove('hidden');
+                saveChangesBtn.disabled = false;
+                editorContent.value = currentFileBeingEdited.content;
+            }
+
+            // Update modal content and show
+            editorTitle.textContent = `Editing: ${currentFileBeingEdited.name}`;
+            
+            editorModal.classList.remove('hidden');
+            setTimeout(() => {
+                editorPanel.classList.remove('opacity-0', 'scale-95');
+                editorPanel.classList.add('opacity-100', 'scale-100');
+            }, 10); 
+        }
+
+        /**
+         * Closes the editor modal.
+         */
+        function closeEditor() {
+            editorPanel.classList.remove('opacity-100', 'scale-100');
+            editorPanel.classList.add('opacity-0', 'scale-95');
+            
+            setTimeout(() => {
+                editorModal.classList.add('hidden');
+                currentFileBeingEdited = null;
+            }, 300); 
+        }
+
+        /**
+         * Saves the content from the editor back to the in-memory file system.
+         */
+        function saveChanges() {
+            if (currentFileBeingEdited) {
+                // Update file content
+                currentFileBeingEdited.content = editorContent.value;
+                
+                // Simple re-calculation of size (based on content length)
+                const newSize = editorContent.value.length;
+                currentFileBeingEdited.size = formatBytes(newSize);
+                currentFileBeingEdited.date = new Date().toLocaleDateString('en-US'); // Update modification date
+
+                closeEditor();
+                renderFiles(); // Re-render the list to show new size/date
+                showNotification(`'${currentFileBeingEdited.name}' changes saved to memory!`);
+            }
+        }
+
+        /**
+         * Adds a new folder to the file system in the current directory.
+         */
+        function addNewFolder() {
+            const newName = prompt("Enter a name for the new folder:");
+            if (!newName) {
+                return;
+            }
+
+            const newFolder = {
+                id: nextFileId++,
+                name: newName,
+                type: 'Folder',
+                extension: '',
+                size: '0 Bytes',
+                date: new Date().toLocaleDateString('en-US'),
+                content: `Contents of ${newName} folder.`,
+                parentId: currentFolderId, // Set parent to current view
+            };
+
+            fileSystem.push(newFolder);
+            renderFiles();
+            showNotification(`Folder '${newName}' created in ${getFullPathString()}.`);
+        }
+        
+        /**
+         * Adds a new, empty text file to the file system in the current directory.
+         */
+        function addNewTextFile() {
+            const newName = prompt("Enter a name for the new text file (e.g., notes.txt):");
+            if (!newName) {
+                return;
+            }
+
+            const newFile = {
+                id: nextFileId++,
+                name: newName,
+                type: 'Code',
+                extension: 'txt',
+                size: '0 Bytes',
+                date: new Date().toLocaleDateString('en-US'),
+                content: "// Start typing your new file content here...",
+                parentId: currentFolderId, // Set parent to current view
+            };
+
+            fileSystem.push(newFile);
+            renderFiles();
+            openFileForEdit(newFile.id);
+            showNotification(`New file '${newName}' created and opened.`);
+        }
+        
+        /**
+         * Recursively deletes a file or a folder and all its contents.
+         * @param {number} idToDelete The ID of the item to start deletion from.
+         */
+        function deleteRecursive(idToDelete) {
+            // Find all children of this folder (if it is a folder)
+            const children = fileSystem.filter(f => f.parentId === idToDelete);
+            
+            // Recursively delete children first
+            children.forEach(child => deleteRecursive(child.id));
+            
+            // Remove the item itself from the array
+            fileSystem = fileSystem.filter(f => f.id !== idToDelete);
+        }
+
+        /**
+         * Deletes the currently selected file or folder.
+         */
+        function deleteSelectedFile() {
+            if (selectedFileId === null) {
+                showNotification("No file or folder is selected.", 'bg-red-500');
+                return;
+            }
+
+            const fileToDelete = fileSystem.find(f => f.id === selectedFileId);
+            if (!fileToDelete) {
+                showNotification("Error finding file to delete.", 'bg-red-500');
+                return;
+            }
+            
+            if (fileToDelete.type === 'Folder') {
+                 if (!confirm(`Are you sure you want to delete the folder "${fileToDelete.name}" and ALL its contents?`)) {
+                    return;
+                }
+            } else {
+                if (!confirm(`Are you sure you want to delete "${fileToDelete.name}"?`)) {
+                    return;
+                }
+            }
+            
+            deleteRecursive(selectedFileId);
+            const deletedName = fileToDelete.name;
+            selectedFileId = null; 
+            renderFiles();
+            showNotification(`'${deletedName}' deleted from memory.`, 'bg-red-500');
+        }
+
+
+        /**
+         * Handles the file selection from the user's computer.
+         */
+        function handleFileUpload(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    const parts = file.name.split('.');
+                    const extension = parts.length > 1 ? parts.pop() : '';
+                    const fileType = extension ? (['js', 'html', 'css', 'txt'].includes(extension.toLowerCase()) ? 'Code' : (['jpg', 'png', 'gif'].includes(extension.toLowerCase()) ? 'Image' : 'File')) : 'File';
+
+                    const newFile = {
+                        id: nextFileId++,
+                        name: file.name,
+                        type: fileType,
+                        extension: extension,
+                        size: formatBytes(file.size),
+                        date: new Date().toLocaleDateString('en-US'),
+                        // Store actual content for text/code, or a description for binary files like images
+                        content: fileType === 'Image' ? `Description for image: ${file.name}` : (e.target.result || `[Content of ${file.name} loaded into memory.]`),
+                        parentId: currentFolderId, // New files go into the current folder
+                    };
+                    
+                    fileSystem.push(newFile);
+                    renderFiles();
+                    showNotification(`File '${file.name}' uploaded to virtual memory.`);
+                };
+                
+                // Read the file content as text
+                reader.readAsText(file);
+            });
+
+            // Clear the input value so the same file can be uploaded again
+            event.target.value = ''; 
+        }
+
+        // --- 5. EVENT HANDLERS AND INITIALIZATION ---
+
+        /**
+         * Handles the click event for any file item (delegation).
+         * @param {Event} event The click event object.
+         */
+        function handleFileClick(event) {
+            let clickedItem = event.target.closest('.file-item');
+
+            if (!clickedItem) return;
+
+            const fileId = parseInt(clickedItem.getAttribute('data-file-id'));
+            const isUpButton = clickedItem.getAttribute('data-is-up') === 'true';
+
+            if (isUpButton) {
+                // Handle Go Up navigation
+                navigateFolder(0, '..');
+                return;
+            }
+
+            const file = fileSystem.find(f => f.id === fileId);
+            if (!file) return;
+
+            // 1. Selection Logic (single click)
+            const isAlreadySelected = selectedFileId === fileId;
+            
+            // Clear all previous selections
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('selected', 'bg-teal-600');
+                item.classList.add('hover:bg-gray-700');
+            });
+            
+            if (isAlreadySelected) {
+                // Double-click/second click action
+                if (file.type === 'Folder') {
+                    // Open folder
+                    navigateFolder(fileId, file.name);
+                } else {
+                    // Open file for editing
+                    openFileForEdit(fileId);
+                }
+                
+            } else {
+                // Select the new item
+                selectedFileId = fileId;
+                clickedItem.classList.remove('hover:bg-gray-700');
+                clickedItem.classList.add('selected', 'bg-teal-600');
+                
+                deleteBtn.disabled = false;
+                deleteBtn.classList.remove('text-gray-400');
+                deleteBtn.classList.add('text-white');
+                
+                // --- MESSAGE AS REQUESTED ---
+                showNotification("Click again on the selected file to view and edit it");
+            }
+        }
+
+        function handleRefresh() {
+            showNotification("File list refreshed!");
+            renderFiles();
+        }
+        
+
+        // Attach event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initial render (starts empty)
+            renderFiles();
+            console.log("File Explorer loaded. Files are stored in temporary browser memory (not saved).");
+
+            // Attach click handler for file list
+            fileListContainer.addEventListener('click', handleFileClick);
+
+            // Toolbar button listeners 
+            refreshBtn.addEventListener('click', handleRefresh);
+            addFolderBtn.addEventListener('click', addNewFolder);
+            addFileBtn.addEventListener('click', addNewTextFile);
+            deleteBtn.addEventListener('click', deleteSelectedFile);
+            
+            uploadBtn.addEventListener('click', () => fileUploadInput.click());
+            fileUploadInput.addEventListener('change', handleFileUpload);
+            
+            // Editor modal button listeners
+            closeEditorBtn.addEventListener('click', closeEditor);
+            cancelChangesBtn.addEventListener('click', closeEditor);
+            saveChangesBtn.addEventListener('click', saveChanges);
+            
+            // Close modal when clicking outside (on the overlay)
+            editorModal.addEventListener('click', (e) => {
+                if (e.target === editorModal) {
+                    closeEditor();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
