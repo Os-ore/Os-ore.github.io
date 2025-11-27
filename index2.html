@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart TV Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght[*400;600;800*]&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --tv-black: #111827; /* Tailwind gray-900 */
+            --tv-accent: #2563eb; /* Tailwind blue-600 */
+            --bezel-width: 30px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* The main TV container */
+        .tv-container {
+            width: 100%;
+            max-width: 1200px;
+            aspect-ratio: 16 / 9; /* 16:9 aspect ratio */
+            background-color: #000;
+            border: var(--bezel-width) solid var(--tv-black);
+            border-radius: 20px;
+            box-shadow: 0 40px 60px rgba(0, 0, 0, 0.5), 0 0 0 10px rgba(255, 255, 255, 0.05) inset;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.5s ease-in-out;
+        }
+
+        /* The TV Screen (where the content goes) */
+        #screen-content {
+            flex-grow: 1;
+            background-color: #000;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Iframe styling for the channels */
+        #channel-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none; /* Hidden by default, shown when a channel is selected */
+        }
+        
+        /* Video styling for the camera (HDMI 1) */
+        #camera-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect for webcam */
+            display: none; /* Hidden by default, shown when camera is active */
+        }
+
+        /* The Menu/Home Screen */
+        .tv-menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(17, 24, 39, 0.95); /* Dark background with slight transparency */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+        }
+
+        /* Channel icons on the home screen */
+        .channel-icon {
+            cursor: pointer;
+            padding: 1rem;
+            margin: 1rem;
+            border-radius: 12px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background-color: rgba(31, 41, 55, 0.8);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .channel-icon:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.5), 0 4px 6px -4px rgba(37, 99, 235, 0.5);
+        }
+
+        /* Setup Modal Styling */
+        #setup-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        
+        .modal-content {
+            background-color: #f3f4f6;
+            color: #111827;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 90%;
+            height: 90%;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Exit Button for HDMI 1 */
+        #exit-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 100;
+            display: none;
+            transition: opacity 0.3s;
+        }
+        #exit-button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="tv-container" id="tvContainer">
+        
+        <!-- EXIT BUTTON (Top Right) -->
+        <button id="exit-button" onclick="showMenu()">X Exit</button>
+
+        <!-- NEW: NOTIFICATION BUTTON (Top Left) -->
+        <button id="notification-button" onclick="showXFrameWarning()" class="absolute top-3 left-3 px-3 py-1 bg-yellow-500 text-white font-semibold text-sm rounded-full shadow-lg hover:bg-yellow-600 transition duration-200 z-50 hidden">
+            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 003-3H7a3 3 0 003 3z"></path></svg>
+            Notifications
+        </button>
+
+        <!-- SCREEN CONTENT AREA -->
+        <div id="screen-content">
+            <!-- Camera Video Feed -->
+            <video id="camera-video" autoplay playsinline></video>
+            
+            <!-- Channel iFrame -->
+            <iframe id="channel-iframe" allow="fullscreen; autoplay; camera; microphone; vr" loading="lazy"></iframe>
+
+            <!-- CAMERA ERROR MESSAGE (Hidden container for error) -->
+            <div id="camera-error-message" class="absolute inset-0 flex items-center justify-center bg-gray-900/90 hidden z-50"></div>
+
+            <!-- TV HOME SCREEN / MENU -->
+            <div id="tv-menu" class="tv-menu">
+                <h1 class="text-4xl font-extrabold text-white mb-8">Smart TV Home</h1>
+                <p class="text-gray-400 mb-12 text-lg">Select an Input or Channel</p>
+
+                <div class="flex flex-wrap justify-center gap-6">
+                    <!-- HDMI 1 (Camera) -->
+                    <div class="channel-icon text-white hover:text-red-400" onclick="switchChannel('camera')">
+                        <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        <span class="font-semibold text-lg">HDMI 1 (Camera)</span>
+                    </div>
+                    <!-- YouTube TV -->
+                    <div class="channel-icon text-white hover:text-red-500" onclick="switchChannel('youtube')">
+                        <svg class="w-10 h-10 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.615 3.197a2.766 2.766 0 00-1.94-1.94C16.48 1 12 1 12 1s-4.48 0-5.675.257a2.766 2.766 0 00-1.94 1.94C4 4.385 4 12 4 12s0 7.615.257 8.803a2.766 2.766 0 001.94 1.94C7.52 23 12 23 12 23s4.48 0 5.675-.257a2.766 2.766 0 001.94-1.94C20 19.615 20 12 20 12s0-7.615-.257-8.803zM10.15 17.51v-11.02L15.4 12l-5.25 5.51z"></path></svg>
+                        <span class="font-semibold text-lg">YouTube</span>
+                    </div>
+                    <!-- Twitch TV -->
+                    <div class="channel-icon text-white hover:text-purple-500" onclick="switchChannel('twitch')">
+                        <svg class="w-10 h-10 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.64 12.33l-2.61 2.61 2.61 2.61 2.61-2.61 2.61-2.61-2.61-2.61-2.61 2.61zm2.34-4.81L12 10.16 9.51 7.67 7.02 10.16 4.53 7.67 7.02 5.18 9.51 2.69 12 5.18l2.49 2.49zm2.49 10.96l-2.49 2.49-2.49-2.49 2.49-2.49 2.49 2.49zm4.78-7.8l-2.49 2.49-2.49-2.49 2.49-2.49 2.49 2.49zM2 0v24h20v-24h-20zm18 2h-16v18h16v-18z"></path></svg>
+                        <span class="font-semibold text-lg">Twitch</span>
+                    </div>
+                    <!-- Plex TV -->
+                    <div class="channel-icon text-white hover:text-yellow-500" onclick="switchChannel('plex')">
+                        <svg class="w-10 h-10 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15h-1V7h1v10zm-3 0h-1V7h1v10zm6 0h1v-10h-1v10zm3 0h1v-10h-1v10z"></path></svg>
+                        <span class="font-semibold text-lg">Plex</span>
+                    </div>
+                    <!-- Netflix -->
+                    <div class="channel-icon text-white hover:text-red-700" onclick="switchChannel('netflix')">
+                        <svg class="w-10 h-10 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16.94 0L12 12.795 7.06 0H0v24h2.95V3.88L6.75 12 10.5 3.88v20.12h3V3.88L17.25 12l3.8-8.12V24h3V0z"></path></svg>
+                        <span class="font-semibold text-lg">Netflix</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Default screen message -->
+            <div id="default-screen" class="absolute inset-0 flex items-center justify-center bg-gray-900/90 transition-opacity duration-300">
+                <p class="text-white text-3xl font-light">Select a Channel or Input</p>
+            </div>
+        </div>
+
+        <!-- NEW: X-FRAME WARNING MODAL (Overlay inside TV screen) -->
+        <div id="xframe-modal" class="absolute inset-0 flex items-center justify-center bg-gray-900/95 z-40 hidden" style="display: none;">
+            <div class="bg-white text-gray-800 p-8 rounded-xl shadow-2xl max-w-lg mx-4 transform transition-all duration-300 scale-100">
+                <h3 class="text-2xl font-extrabold text-blue-600 mb-4">⚠️ Important Channel Notice</h3>
+                <p class="mb-4">Most streaming channels (like YouTube, Netflix, and Twitch) prevent content from being embedded into other websites (X-Frame-Options policy).</p>
+                <p class="mb-6 font-medium">To bypass this and see the real TV-optimized interfaces within this simulator, you may need to use a browser extension.</p>
+                
+                <p class="text-sm bg-yellow-100 p-3 rounded-lg border border-yellow-300">
+                    Search for and install a **"Ignore X-Frame Headers"** or **"CORS Everywhere"** type of extension for your browser.
+                </p>
+                
+                <div class="flex justify-center mt-6">
+                    <button onclick="closeXFrameWarning()" class="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-200">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TV STAND (Purely aesthetic) -->
+        <div class="w-1/3 h-4 bg-gray-800 absolute bottom-[-40px] left-1/3 rounded-t-lg"></div>
+    </div>
+
+    <!-- SETUP MODAL -->
+    <div id="setup-modal" class="hidden">
+        <div class="modal-content">
+            <h2 class="text-3xl font-bold mb-6 text-center text-blue-600">📺 Smart TV Setup Guide</h2>
+            <p class="mb-4">Welcome! To ensure all media channels (like Netflix and YouTube) display their TV-optimized interfaces correctly within this simulator, you need to trick your browser into thinking it's a Smart TV. This is done using a User-Agent Switcher extension.</p>
+            
+            <h3 class="text-xl font-semibold mt-6 mb-3">Step 1: Install the User-Agent Switcher</h3>
+            <ol class="list-decimal list-inside space-y-2 pl-4">
+                <li>Search Google for: **"User-Agent Switcher for Chrome"**.</li>
+                <li>Install a reputable extension (e.g., *User-Agent Switcher and Manager*).</li>
+            </ol>
+            
+            <h3 class="text-xl font-semibold mt-6 mb-3">Step 2: Add the LG TV (2025) User-Agent</h3>
+            <p>You need to add a custom User-Agent string for a modern Smart TV. We'll use the one for a modern LG webOS TV (2025).</p>
+            <ol class="list-decimal list-inside space-y-2 pl-4">
+                <li>Open the newly installed User-Agent Switcher extension settings.</li>
+                <li>Find the option to **add a New/Custom User-Agent**.</li>
+                <li>**Name/Description:** `LG WebOS TV 2025`</li>
+                <li>**User-Agent String:** (Copy the entire line below)
+                    <pre class="bg-gray-200 p-2 text-sm rounded-md overflow-x-auto mt-2">
+Mozilla/5.0 (WebOS; Linux) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 WebOSBrowser/6.0.4</pre>
+                </li>
+                <li>**Append/Replace/Prepend:** Choose **"Replace"** (this is important).</li>
+                <li>Save the custom User-Agent.</li>
+            </ol>
+            
+            <h3 class="text-xl font-semibold mt-6 mb-3">Step 3: Activate and Refresh</h3>
+            <ol class="list-decimal list-inside space-y-2 pl-4">
+                <li>Click the extension icon and select the custom profile you just created: **`LG WebOS TV 2025`**.</li>
+                <li>**Refresh this Simulator Page.** (The media channels will only load in their TV format *after* you refresh with the User-Agent active).</li>
+            </ol>
+            
+            <div class="flex justify-center mt-10">
+                <button onclick="setupDone()" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 transition duration-200">
+                    I Have Installed & Refreshed (Enter TV)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        const CAMERA_STREAM_KEY = 'camera';
+        const CHANNELS = {
+            'camera': { url: null, name: 'HDMI 1', type: 'video' },
+            'youtube': { url: 'https://youtube.com/tv', name: 'YouTube', type: 'iframe' },
+            'twitch': { url: 'https://www.tv.twitch.tv', name: 'Twitch', type: 'iframe' },
+            'plex': { url: 'https://www.plex.tv/en-au/', name: 'Plex', type: 'iframe' },
+            'netflix': { url: 'https://www.netflix.com', name: 'Netflix', type: 'iframe' }
+        };
+
+        let currentChannel = 'menu';
+        let mediaStream = null;
+
+        // DOM elements
+        const setupModal = document.getElementById('setup-modal');
+        const tvMenu = document.getElementById('tv-menu');
+        const defaultScreen = document.getElementById('default-screen');
+        const channelIframe = document.getElementById('channel-iframe');
+        const cameraVideo = document.getElementById('camera-video');
+        const exitButton = document.getElementById('exit-button');
+        const cameraErrorMessage = document.getElementById('camera-error-message');
+        
+        // NEW: X-Frame Warning elements
+        const xframeModal = document.getElementById('xframe-modal');
+        const notificationButton = document.getElementById('notification-button');
+
+
+        // --- Core App Flow Functions ---
+
+        /**
+         * Initializes the app, checking if the setup has been completed.
+         */
+        window.onload = function() {
+            // Check if the user has completed the setup before
+            if (localStorage.getItem('tvSetupComplete') !== 'true') {
+                showSetupModal();
+            } else {
+                showMenu();
+            }
+            
+            // Set up keyboard listener for exiting the channel view
+            document.addEventListener('keydown', handleKeyPress);
+            console.log("TV Simulator Initialized. Press 'X' to return to menu when in a channel.");
+        };
+
+        /**
+         * Shows the setup modal.
+         */
+        function showSetupModal() {
+            setupModal.classList.remove('hidden');
+            setupModal.style.display = 'flex'; // Explicitly show
+        }
+
+        /**
+         * Hides the setup modal and marks completion in localStorage.
+         */
+        function setupDone() {
+            localStorage.setItem('tvSetupComplete', 'true');
+            
+            // Explicitly hide the modal to ensure it doesn't block the menu
+            setupModal.classList.add('hidden');
+            setupModal.style.display = 'none'; 
+            
+            // Immediately transition to the Home Menu
+            showMenu();
+        }
+
+        /**
+         * Displays the TV Home Menu.
+         */
+        function showMenu() {
+            currentChannel = 'menu';
+            
+            // 1. Stop and release the camera stream if active
+            stopCameraStream();
+
+            // 2. Reset visibility of all content containers
+            tvMenu.style.display = 'flex'; // Show the Home Menu
+            defaultScreen.style.display = 'none';
+            channelIframe.style.display = 'none';
+            cameraVideo.style.display = 'none';
+            exitButton.style.display = 'none';
+            cameraErrorMessage.style.display = 'none'; // Hide the camera error message if it was shown
+            
+            // 3. Clear the iframe source to stop background audio/video
+            channelIframe.src = '';
+
+            // 4. NEW: Handle X-Frame Warning visibility
+            if (localStorage.getItem('xframeWarningShown') !== 'true') {
+                showXFrameWarning();
+            } else {
+                // If warning has been seen, ensure the notification button is visible on the menu
+                notificationButton.classList.remove('hidden');
+                notificationButton.style.display = 'block';
+            }
+        }
+
+        // --- NEW: X-Frame Warning Functions ---
+        
+        /**
+         * Shows the X-Frame Warning modal, hiding the menu temporarily.
+         */
+        function showXFrameWarning() {
+            // Hide the menu temporarily if it's visible, so the warning overlays cleanly
+            tvMenu.style.display = 'none';
+            xframeModal.classList.remove('hidden');
+            xframeModal.style.display = 'flex'; // Show the modal
+            notificationButton.classList.add('hidden'); // Hide notification button while modal is open
+        }
+
+        /**
+         * Closes the X-Frame Warning modal and marks it as seen in localStorage.
+         */
+        function closeXFrameWarning() {
+            localStorage.setItem('xframeWarningShown', 'true');
+            xframeModal.classList.add('hidden');
+            xframeModal.style.display = 'none'; // Hide the modal
+
+            // Ensure the main menu and the permanent notification button are now visible
+            tvMenu.style.display = 'flex';
+            notificationButton.classList.remove('hidden');
+            notificationButton.style.display = 'block';
+        }
+
+        // --- Channel & Input Functions ---
+
+        /**
+         * Switches the content displayed on the screen.
+         * @param {string} channelId - The ID of the channel to switch to ('camera', 'youtube', etc.).
+         */
+        function switchChannel(channelId) {
+            const channel = CHANNELS[channelId];
+            if (!channel) return;
+
+            currentChannel = channelId;
+
+            // 1. Hide the menu and default screen
+            tvMenu.style.display = 'none';
+            defaultScreen.style.display = 'none';
+            cameraErrorMessage.style.display = 'none';
+            exitButton.style.display = 'block';
+            notificationButton.style.display = 'none'; // Hide notifications when in a channel
+
+            // 2. Handle Camera Input (HDMI 1)
+            if (channel.type === 'video') {
+                channelIframe.style.display = 'none';
+                loadCamera();
+            } 
+            // 3. Handle iFrame Channels
+            else if (channel.type === 'iframe') {
+                stopCameraStream();
+                cameraVideo.style.display = 'none';
+                channelIframe.style.display = 'block';
+                channelIframe.src = channel.url;
+            }
+        }
+
+        /**
+         * Requests and loads the user's camera feed (HDMI 1).
+         */
+        async function loadCamera() {
+            try {
+                // Request camera and microphone access
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                
+                // Attach stream to video element
+                cameraVideo.srcObject = mediaStream;
+                cameraVideo.play();
+                cameraVideo.style.display = 'block';
+                
+                console.log("HDMI 1 (Camera) loaded successfully.");
+            } catch (err) {
+                console.error("Could not access the camera (HDMI 1):", err);
+                
+                // Use the dedicated error message div instead of overwriting screen-content
+                const errorMessageHTML = `
+                    <div class="text-white text-center p-8">
+                        <p class="text-4xl mb-4 text-red-500">❌ HDMI 1 Signal Lost</p>
+                        <p class="text-xl">Please grant camera permission to view this input, or your browser might not support it.</p>
+                        <button onclick="showMenu()" class="mt-6 px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Back to Home</button>
+                    </div>
+                `;
+                cameraErrorMessage.innerHTML = errorMessageHTML;
+                cameraErrorMessage.style.display = 'flex'; // Show the error overlay
+
+                // Hide video and exit button
+                cameraVideo.style.display = 'none';
+                exitButton.style.display = 'none';
+            }
+        }
+
+        /**
+         * Stops the camera stream and releases the hardware.
+         */
+        function stopCameraStream() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+                cameraVideo.srcObject = null;
+            }
+        }
+
+        /**
+         * Handles keyboard events for exiting the channel view.
+         */
+        function handleKeyPress(event) {
+            // Check if the current channel is not 'menu' and the key pressed is 'x'
+            if (currentChannel !== 'menu' && (event.key === 'x' || event.key === 'X')) {
+                showMenu();
+            }
+        }
+    </script>
+
+</body>
+</html>
