@@ -7,3 +7,4 @@ NEW UPDATES!
 
 - file explorer added, add "https://os-ore.github.io/fe.html" has an app in the simulator for better lookin' like os
 - you can now pin apps from the app launcher in the simulator for fast opening apps
+- new smart tv "https://os-ore.github.io/index2.html", go to it if you will likely to have a tv in a browser
