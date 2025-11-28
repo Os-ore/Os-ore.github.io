@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Copy Button Example</title>
+  <style>
+    .container {
+      text-align: center;
+      margin-top: 50px;
+    }
+    .copy-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    .copy-btn:hover {
+      background-color: #45a049;
+    }
+    .text {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="text" id="textToCopy">® ™ ©</div>
+  <button class="copy-btn" onclick="copyText()">Copy Text</button>
+</div>
+
+<script>
+  function copyText() {
+    const textElement = document.getElementById("textToCopy");
+    const range = document.createRange();
+    range.selectNode(textElement);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+
+    try {
+      document.execCommand("copy");
+      alert("Text copied to clipboard!");
+    } catch (err) {
+      alert("Failed to copy text");
+    }
+
+    window.getSelection().removeAllRanges();
+  }
+</script>
+
+</body>
+</html>
